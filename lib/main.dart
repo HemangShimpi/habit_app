@@ -123,7 +123,7 @@ class _HomePageState extends State<HomePage> {
                   value: false,
                   onChanged: (value) {},
                   checkColor: Colors.white,
-                  fillColor: WidgetStateProperty.all(Colors.blueAccent),
+                  fillColor: MaterialStateProperty.all(Colors.blueAccent),
                 ),
               ),
             );
@@ -138,3 +138,4 @@ class _HomePageState extends State<HomePage> {
     );
   }
 }
+
