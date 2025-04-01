@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart'; 
+
 void main() {
   runApp(MyApp());
 }
@@ -25,6 +27,22 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   List<String> habits = ['Drink Water', 'Exercise', 'Read Book'];
+  DateTime selectedDate = DateTime.now();
+
+  void _pickDate() async {
+    DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: selectedDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+
+    if (pickedDate != null && pickedDate != selectedDate) {
+      setState(() {
+        selectedDate = pickedDate;
+      });
+    }
+  }
 
   void _addHabit() {
     TextEditingController controller = TextEditingController();
@@ -59,10 +77,18 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    String formattedDate = DateFormat('MMMM dd, yyyy').format(selectedDate);
+
     return Scaffold(
       appBar: AppBar(
-        title: Text("Habit Tracker"),
+        title: Text("Habit Tracker for $formattedDate"),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: Icon(Icons.calendar_today),
+            onPressed: _pickDate,
+          ),
+        ],
       ),
       body: ListView.builder(
         itemCount: habits.length,
@@ -70,7 +96,7 @@ class _HomePageState extends State<HomePage> {
           return ListTile(
             title: Text(habits[index]),
             leading: Checkbox(
-              value: false, 
+              value: false,
               onChanged: (value) {},
             ),
           );
