@@ -1,79 +1,58 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-
-void main() {
-  runApp(MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Habit Tracker',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        scaffoldBackgroundColor: Colors.grey[900], // Background color
-        textTheme: TextTheme(
-          bodyLarge: TextStyle(color: Colors.white, fontSize: 18),
-          bodyMedium: TextStyle(color: Colors.white70, fontSize: 16),
-        ),
-      ),
-      home: HomePage(),
-    );
-  }
-}
+import 'database_helper.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({Key? key}) : super(key: key);
+  const HomePage({super.key});
 
   @override
   _HomePageState createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
-  List<String> habits = ['Drink Water', 'Exercise', 'Read Book'];
   DateTime selectedDate = DateTime.now();
+  List<Habit> habits = [];
+  Map<int, HabitStatus> habitStatuses = {};
+  final dbHelper = DatabaseHelper();
 
-  String get formattedDate => DateFormat('EEEE, MMM d, y').format(selectedDate);
+  @override
+  void initState() {
+    super.initState();
+    _loadHabits();
+  }
 
-  void _addHabit() {
-    TextEditingController controller = TextEditingController();
-    showDialog(
-      context: context,
-      builder:
-          (_) => AlertDialog(
-            backgroundColor: Colors.grey[800],
-            title: Text("Add Habit", style: TextStyle(color: Colors.white)),
-            content: TextField(
-              controller: controller,
-              style: TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: "Habit title",
-                hintStyle: TextStyle(color: Colors.white60),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  if (controller.text.isNotEmpty) {
-                    setState(() {
-                      habits.add(controller.text);
-                    });
-                    Navigator.pop(context);
-                  }
-                },
-                child: Text("Add", style: TextStyle(color: Colors.blueAccent)),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text(
-                  "Cancel",
-                  style: TextStyle(color: Colors.redAccent),
-                ),
-              ),
-            ],
-          ),
-    );
+  String get formattedDate {
+    return "${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}";
+  }
+
+  Future<void> _loadHabits() async {
+    List<Habit> loadedHabits = await dbHelper.getHabits();
+    Map<int, HabitStatus> statuses = {};
+    for (var habit in loadedHabits) {
+      HabitStatus? status = await dbHelper.getHabitStatus(
+        habit.id!,
+        formattedDate,
+      );
+      if (status != null) {
+        statuses[habit.id!] = status;
+      }
+    }
+    setState(() {
+      habits = loadedHabits;
+      habitStatuses = statuses;
+    });
+  }
+
+  void _toggleHabit(Habit habit, bool? newValue) async {
+    bool isCompleted = newValue ?? false;
+    await dbHelper.toggleHabitStatus(habit.id!, formattedDate, isCompleted);
+    _loadHabits();
+  }
+
+  void _changeDate(int days) {
+    setState(() {
+      selectedDate = selectedDate.add(Duration(days: days));
+    });
+    _loadHabits();
   }
 
   Future<void> _selectDate() async {
@@ -87,55 +66,182 @@ class _HomePageState extends State<HomePage> {
       setState(() {
         selectedDate = pickedDate;
       });
+      _loadHabits();
     }
+  }
+
+  void _addHabit() {
+    TextEditingController controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder:
+          (_) => AlertDialog(
+        title: Text("Add Habit"),
+        content: TextField(
+          controller: controller,
+          decoration: InputDecoration(hintText: "Habit title"),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              if (controller.text.isNotEmpty) {
+                await dbHelper.insertHabit(Habit(title: controller.text));
+                Navigator.pop(context);
+                _loadHabits();
+              }
+            },
+            child: Text("Add"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("Cancel"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteHabit(Habit habit) {
+    showDialog(
+      context: context,
+      builder:
+          (_) => AlertDialog(
+        title: Text("Delete Habit"),
+        content: Text("Are you sure you want to delete this habit?"),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await dbHelper.deleteHabit(habit.id!);
+              Navigator.pop(context);
+              _loadHabits();
+            },
+            child: Text("Delete"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("Cancel"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _editStreak(Habit habit) async {
+    TextEditingController controller = TextEditingController();
+    HabitStatus? status = habitStatuses[habit.id!];
+    int currentStreak = status?.streak ?? 0;
+    controller.text = currentStreak.toString();
+
+    showDialog(
+      context: context,
+      builder:
+          (_) => AlertDialog(
+        title: Text("Edit Streak for ${habit.title}"),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(hintText: "Enter new streak"),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              int? newStreak = int.tryParse(controller.text);
+              if (newStreak != null && newStreak >= 0) {
+                await dbHelper.updateHabitStreak(
+                  habit.id!,
+                  newStreak as String,
+                  formattedDate as int,
+                );
+                Navigator.pop(context);
+                _loadHabits();
+              }
+            },
+            child: Text("Save"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("Cancel"),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Habit Tracker for $formattedDate"),
+        title: Text("Habits for $formattedDate"),
         centerTitle: true,
-        backgroundColor: Colors.blueGrey[800],
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back),
+          onPressed: () => _changeDate(-1),
+        ),
         actions: [
+          IconButton(icon: Icon(Icons.calendar_today), onPressed: _selectDate),
           IconButton(
-            icon: Icon(Icons.calendar_today, color: Colors.white),
-            onPressed: _selectDate,
+            icon: Icon(Icons.arrow_forward),
+            onPressed: () => _changeDate(1),
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(12.0),
+      body: Container(
+        color: Colors.white,
         child: ListView.builder(
           itemCount: habits.length,
           itemBuilder: (_, index) {
-            return Card(
-              color: Colors.grey[850],
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+            Habit habit = habits[index];
+            HabitStatus? status = habitStatuses[habit.id!];
+            bool isCompleted = status?.isCompleted == 1;
+            int streak = status?.streak ?? 0;
+            return ListTile(
+              title: Text(habit.title),
+              leading: Checkbox(
+                value: isCompleted,
+                onChanged: (value) => _toggleHabit(habit, value),
               ),
-              child: ListTile(
-                title: Text(
-                  habits[index],
-                  style: TextStyle(fontSize: 18, color: Colors.white),
-                ),
-                leading: Checkbox(
-                  value: false,
-                  onChanged: (value) {},
-                  checkColor: Colors.white,
-                  fillColor: MaterialStateProperty.all(Colors.blueAccent),
-                ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text("Streak: $streak🔥"),
+                  IconButton(
+                    icon: Icon(Icons.edit),
+                    onPressed: () => _editStreak(habit),
+                  ),
+                ],
               ),
+              onLongPress: () => _deleteHabit(habit),
             );
           },
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.blueAccent,
         onPressed: _addHabit,
-        child: Icon(Icons.add, color: Colors.white),
+        child: Icon(Icons.add),
       ),
     );
   }
 }
 
+void main() {
+  runApp(
+    MaterialApp(
+      title: 'Habit Tracker',
+      theme: ThemeData(
+        primaryColor: Colors.blueGrey,
+        scaffoldBackgroundColor: Color(0xFF121212),
+        appBarTheme: AppBarTheme(color: Colors.brown),
+        buttonTheme: ButtonThemeData(buttonColor: Colors.blueAccent),
+        textTheme: TextTheme(
+          bodyLarge: TextStyle(color: Colors.white),
+          bodyMedium: TextStyle(color: Colors.grey[400]),
+        ),
+        checkboxTheme: CheckboxThemeData(
+          checkColor: WidgetStateProperty.all(Colors.black),
+          fillColor: WidgetStateProperty.all(Colors.white),
+        ),
+      ),
+      home: HomePage(),
+    ),
+  );
+}
